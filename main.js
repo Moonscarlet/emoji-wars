@@ -5,6 +5,7 @@ class Game {
         this.setupCanvas();
         this.initializeGame();
         this.setupEventListeners();
+        this.ballEmoji = this.getRandomBallEmoji();
     }
 
     setupCanvas() {
@@ -158,11 +159,10 @@ class Game {
     }
 
     drawBall() {
-        this.ctx.beginPath();
-        this.ctx.arc(this.ball.x, this.ball.y, this.ball.radius, 0, Math.PI * 2);
-        this.ctx.fillStyle = '#0095DD';
-        this.ctx.fill();
-        this.ctx.closePath();
+        this.ctx.font = `${this.ball.radius * 2}px Arial`;
+        this.ctx.textAlign = 'center';
+        this.ctx.textBaseline = 'middle';
+        this.ctx.fillText(this.ballEmoji, this.ball.x, this.ball.y);
     }
 
     drawPaddle() {
@@ -184,15 +184,8 @@ class Game {
                     this.bricks[c][r].x = brickX;
                     this.bricks[c][r].y = brickY;
                     
-                    // Draw brick background
-                    this.ctx.beginPath();
-                    this.ctx.rect(brickX, brickY, this.brickWidth, this.brickHeight);
-                    this.ctx.fillStyle = '#0095DD';
-                    this.ctx.fill();
-                    this.ctx.closePath();
-                    
-                    // Draw emoji
-                    this.ctx.font = `${this.brickHeight * 0.7}px Arial`;
+                    // Draw only the emoji (no background)
+                    this.ctx.font = `${this.brickHeight}px Arial`;
                     this.ctx.textAlign = 'center';
                     this.ctx.textBaseline = 'middle';
                     this.ctx.fillStyle = '#FFFFFF';
@@ -242,6 +235,7 @@ class Game {
                     this.ball.dx = this.canvas.width / 200;
                     this.ball.dy = -this.canvas.width / 200;
                     this.paddle.x = (this.canvas.width - this.paddle.width) / 2;
+                    this.ballEmoji = this.getRandomBallEmoji();
                 }
             }
         }
@@ -282,6 +276,11 @@ class Game {
         this.gameOver = true;
         alert('Congratulations! You win!');
         this.restartGame();
+    }
+
+    getRandomBallEmoji() {
+        const ballEmojis = ['⚽', '🏀', '⚾', '🎾', '🔮', '💫', '⭐', '🌟', '🌞', '🎈'];
+        return ballEmojis[Math.floor(Math.random() * ballEmojis.length)];
     }
 }
 
