@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Emoji Wars</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div id="gameContainer">
+        <div id="gameStats">
+            <span id="scoreDisplay">Score: 0</span>
+            <span id="livesDisplay">Lives: 3</span>
+        </div>
+        <canvas id="gameCanvas"></canvas>
+        <div id="startScreen" class="overlay">
+            <h1>Emoji Wars</h1>
+            <button id="startButton">Start Game</button>
+            <p>Use ← → arrows to move the paddle</p>
+        </div>
+        <div id="gameOverScreen" class="overlay hidden">
+            <h1>Game Over</h1>
+            <p id="finalScore">Final Score: 0</p>
+            <button id="restartButton">Play Again</button>
+        </div>
+    </div>
+    <script src="main.js"></script>
+</body>
+</html> 
