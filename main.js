@@ -3,7 +3,7 @@ class Game {
         this.canvas = document.getElementById('gameCanvas');
         this.ctx = this.canvas.getContext('2d');
         this.setupCanvas();
-        this.initializeGame();
+        // Don't initialize the game state here yet. We'll do it in startGame() after we know the chosen speed.
         this.setupEventListeners();
         this.ballEmoji = this.getRandomBallEmoji();
     }
@@ -20,7 +20,6 @@ class Game {
             this.canvas.width = maxWidth * scale;
             this.canvas.height = maxHeight * scale;
             
-            // Update paddle and ball sizes based on canvas size
             this.paddleWidth = this.canvas.width / 8;
             this.paddleHeight = this.canvas.height / 40;
             this.ballRadius = this.canvas.width / 60;
@@ -30,19 +29,19 @@ class Game {
         updateCanvasSize();
     }
 
-    initializeGame() {
+    initializeGame(speedFactor) {
         // Game state
         this.score = 0;
         this.lives = 3;
         this.gameStarted = false;
         this.gameOver = false;
         
-        // Ball properties
+        // Ball properties (apply speed factor)
         this.ball = {
             x: this.canvas.width / 2,
             y: this.canvas.height - 30,
-            dx: this.canvas.width / 200,
-            dy: -this.canvas.width / 200,
+            dx: (this.canvas.width / 200) * speedFactor,
+            dy: -(this.canvas.width / 200) * speedFactor,
             radius: this.ballRadius
         };
 
@@ -140,11 +139,34 @@ class Game {
             for(let r = 0; r < this.brickRowCount; r++) {
                 const b = this.bricks[c][r];
                 if(b.status === 1) {
-                    if(this.ball.x > b.x && 
-                       this.ball.x < b.x + this.brickWidth && 
-                       this.ball.y > b.y && 
-                       this.ball.y < b.y + this.brickHeight) {
-                        this.ball.dy = -this.ball.dy;
+                    const ballLeft = this.ball.x - this.ball.radius;
+                    const ballRight = this.ball.x + this.ball.radius;
+                    const ballTop = this.ball.y - this.ball.radius;
+                    const ballBottom = this.ball.y + this.ball.radius;
+
+                    const brickLeft = b.x;
+                    const brickRight = b.x + this.brickWidth;
+                    const brickTop = b.y;
+                    const brickBottom = b.y + this.brickHeight;
+
+                    if(ballRight > brickLeft && 
+                       ballLeft < brickRight && 
+                       ballBottom > brickTop && 
+                       ballTop < brickBottom) {
+                        
+                        const overlapX = Math.min(ballRight - brickLeft, brickRight - ballLeft);
+                        const overlapY = Math.min(ballBottom - brickTop, brickBottom - ballTop);
+
+                        if (overlapX < overlapY) {
+                            // Horizontal collision
+                            this.ball.dx = (this.ball.x < b.x + this.brickWidth/2) ? 
+                                -Math.abs(this.ball.dx) : Math.abs(this.ball.dx);
+                        } else {
+                            // Vertical collision
+                            this.ball.dy = (this.ball.y < b.y + this.brickHeight/2) ? 
+                                -Math.abs(this.ball.dy) : Math.abs(this.ball.dy);
+                        }
+
                         b.status = 0;
                         this.score++;
                         this.updateScoreDisplay();
@@ -192,7 +214,6 @@ class Game {
                     this.bricks[c][r].x = brickX;
                     this.bricks[c][r].y = brickY;
                     
-                    // Draw only the emoji (no background)
                     this.ctx.font = `${this.brickHeight}px Arial`;
                     this.ctx.textAlign = 'center';
                     this.ctx.textBaseline = 'middle';
@@ -227,10 +248,26 @@ class Game {
         if(this.ball.y + this.ball.dy < this.ball.radius) {
             this.ball.dy = -this.ball.dy;
         } else if(this.ball.y + this.ball.dy > this.canvas.height - this.ball.radius) {
+            // Check for paddle collision with angle change
             if(this.ball.x > this.paddle.x && 
                this.ball.x < this.paddle.x + this.paddle.width) {
-                this.ball.dy = -this.ball.dy;
+               
+                // Calculate bounce angle based on where it hit the paddle
+                const paddleCenter = this.paddle.x + this.paddle.width / 2;
+                const hitRatio = (this.ball.x - paddleCenter) / (this.paddle.width / 2);
+                
+                // Max bounce angle: 60 degrees (pi/3)
+                const maxBounceAngle = Math.PI / 3;
+                const bounceAngle = hitRatio * maxBounceAngle;
+                
+                // Current speed (magnitude)
+                const speed = Math.sqrt(this.ball.dx * this.ball.dx + this.ball.dy * this.ball.dy);
+                
+                this.ball.dx = speed * Math.sin(bounceAngle);
+                this.ball.dy = -speed * Math.cos(bounceAngle);
+
             } else {
+                // Missed the paddle
                 this.lives--;
                 this.updateLivesDisplay();
                 
@@ -238,10 +275,14 @@ class Game {
                     this.gameOver = true;
                     this.showGameOver();
                 } else {
+                    // Reset ball position and speed according to selected speed
+                    const speedSelect = document.getElementById('ballSpeedSelect');
+                    const selectedSpeed = speedSelect ? parseFloat(speedSelect.value) : 1;
+                    
                     this.ball.x = this.canvas.width / 2;
                     this.ball.y = this.canvas.height - 30;
-                    this.ball.dx = this.canvas.width / 200;
-                    this.ball.dy = -this.canvas.width / 200;
+                    this.ball.dx = (this.canvas.width / 200) * selectedSpeed;
+                    this.ball.dy = -(this.canvas.width / 200) * selectedSpeed;
                     this.paddle.x = (this.canvas.width - this.paddle.width) / 2;
                     this.ballEmoji = this.getRandomBallEmoji();
                 }
@@ -263,6 +304,11 @@ class Game {
     }
 
     startGame() {
+        // Read speed from dropdown
+        const speedSelect = document.getElementById('ballSpeedSelect');
+        const selectedSpeed = speedSelect ? parseFloat(speedSelect.value) : 1;
+
+        this.initializeGame(selectedSpeed);
         document.getElementById('startScreen').classList.add('hidden');
         this.gameStarted = true;
         this.draw();
@@ -275,7 +321,11 @@ class Game {
 
     restartGame() {
         document.getElementById('gameOverScreen').classList.add('hidden');
-        this.initializeGame();
+        // Read speed from dropdown again in case it changed
+        const speedSelect = document.getElementById('ballSpeedSelect');
+        const selectedSpeed = speedSelect ? parseFloat(speedSelect.value) : 1;
+
+        this.initializeGame(selectedSpeed);
         this.gameStarted = true;
         this.draw();
     }
@@ -292,7 +342,7 @@ class Game {
     }
 }
 
-// Start the game when the page loads
+// Start the game object when page loads
 window.onload = () => {
     new Game();
-}; 
+};
