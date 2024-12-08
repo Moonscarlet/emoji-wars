@@ -3,9 +3,27 @@ class Game {
         this.canvas = document.getElementById('gameCanvas');
         this.ctx = this.canvas.getContext('2d');
         this.setupCanvas();
-        // Don't initialize the game state here yet. We'll do it in startGame() after we know the chosen speed.
         this.setupEventListeners();
         this.ballEmoji = this.getRandomBallEmoji();
+        
+        // Track powerups
+        this.powerups = [];
+        
+        // Permanent modifiers
+        this.speedMultiplier = 1;
+        this.paddleSizeMultiplier = 1;
+        this.extraLives = 0;
+
+        // Temporary effect
+        this.currentTemporaryEffect = null; // 'fire' or 'magnet'
+        this.magnetActive = false;
+        this.fireballActive = false;
+
+        // Ball stuck info (for magnet)
+        this.ballStuckToPaddle = false;
+        this.ballStuckOffsetX = 0;
+
+        this.initializeGame(1); // Default initial speed factor
     }
 
     setupCanvas() {
@@ -20,7 +38,7 @@ class Game {
             this.canvas.width = maxWidth * scale;
             this.canvas.height = maxHeight * scale;
             
-            this.paddleWidth = this.canvas.width / 8;
+            this.basePaddleWidth = this.canvas.width / 8;
             this.paddleHeight = this.canvas.height / 40;
             this.ballRadius = this.canvas.width / 60;
         };
@@ -30,26 +48,24 @@ class Game {
     }
 
     initializeGame(speedFactor) {
-        // Game state
         this.score = 0;
-        this.lives = 3;
+        this.lives = 3 + this.extraLives;
         this.gameStarted = false;
         this.gameOver = false;
-        
-        // Ball properties (apply speed factor)
+        this.currentSpeedFactor = speedFactor * this.speedMultiplier;
+
         this.ball = {
             x: this.canvas.width / 2,
             y: this.canvas.height - 30,
-            dx: (this.canvas.width / 200) * speedFactor,
-            dy: -(this.canvas.width / 200) * speedFactor,
+            dx: (this.canvas.width / 200) * this.currentSpeedFactor,
+            dy: -(this.canvas.width / 200) * this.currentSpeedFactor,
             radius: this.ballRadius
         };
 
-        // Paddle properties
         this.paddle = {
-            width: this.paddleWidth,
+            width: this.basePaddleWidth * this.paddleSizeMultiplier,
             height: this.paddleHeight,
-            x: (this.canvas.width - this.paddleWidth) / 2
+            x: (this.canvas.width - this.basePaddleWidth * this.paddleSizeMultiplier) / 2
         };
 
         // Controls
@@ -58,10 +74,17 @@ class Game {
 
         // Initialize bricks
         this.initializeBricks();
-        
-        // Update displays
+
+        // Clear powerups
+        this.powerups = [];
+
+        // Clear temporary effects
+        this.clearTemporaryEffect();
+
+        this.ballEmoji = this.getRandomBallEmoji();
         this.updateScoreDisplay();
         this.updateLivesDisplay();
+        this.updateActiveEffectsDisplay();
     }
 
     initializeBricks() {
@@ -105,6 +128,13 @@ class Game {
         document.addEventListener('keyup', (e) => this.keyUpHandler(e), false);
         document.addEventListener('mousemove', (e) => this.mouseMoveHandler(e), false);
         
+        // Release ball if magnet and space pressed
+        document.addEventListener('keydown', (e) => {
+            if (e.key === ' ' && this.ballStuckToPaddle) {
+                this.releaseBallFromPaddle();
+            }
+        });
+
         document.getElementById('startButton').addEventListener('click', () => this.startGame());
         document.getElementById('restartButton').addEventListener('click', () => this.restartGame());
     }
@@ -158,11 +188,9 @@ class Game {
                         const overlapY = Math.min(ballBottom - brickTop, brickBottom - ballTop);
 
                         if (overlapX < overlapY) {
-                            // Horizontal collision
                             this.ball.dx = (this.ball.x < b.x + this.brickWidth/2) ? 
                                 -Math.abs(this.ball.dx) : Math.abs(this.ball.dx);
                         } else {
-                            // Vertical collision
                             this.ball.dy = (this.ball.y < b.y + this.brickHeight/2) ? 
                                 -Math.abs(this.ball.dy) : Math.abs(this.ball.dy);
                         }
@@ -170,13 +198,59 @@ class Game {
                         b.status = 0;
                         this.score++;
                         this.updateScoreDisplay();
-                        
+
+                        if (this.fireballActive) {
+                            this.destroySurroundingBricks(c, r);
+                        }
+
+                        this.maybeSpawnPowerup(b);
+
                         if(this.score === this.brickRowCount * this.brickColumnCount) {
                             this.win();
                         }
                     }
                 }
             }
+        }
+    }
+
+    destroySurroundingBricks(col, row) {
+        const neighbors = [
+            [col-1, row], [col+1, row], [col, row-1], [col, row+1],
+            [col-1, row-1], [col+1, row-1], [col-1, row+1], [col+1, row+1]
+        ];
+        for (let [nc, nr] of neighbors) {
+            if (this.bricks[nc] && this.bricks[nc][nr] && this.bricks[nc][nr].status === 1) {
+                this.bricks[nc][nr].status = 0;
+                this.score++;
+                this.updateScoreDisplay();
+                this.maybeSpawnPowerup(this.bricks[nc][nr]);
+            }
+        }
+    }
+
+    maybeSpawnPowerup(brick) {
+        // 30% chance of a powerup
+        if (Math.random() < 0.3) {
+            const powerupTypes = [
+                {type: 'fire', emoji: '🔥', temporary: true},
+                {type: 'magnet', emoji: '🧲', temporary: true},
+                {type: 'speedUp', emoji: '⚡', temporary: false},
+                {type: 'speedDown', emoji: '🐌', temporary: false},
+                {type: 'longPaddle', emoji: '📏', temporary: false},
+                {type: 'shortPaddle', emoji: '✂️', temporary: false},
+                {type: 'extraLife', emoji: '❤️', temporary: false}
+            ];
+            const chosen = powerupTypes[Math.floor(Math.random() * powerupTypes.length)];
+
+            this.powerups.push({
+                x: brick.x + this.brickWidth / 2,
+                y: brick.y + this.brickHeight / 2,
+                type: chosen.type,
+                emoji: chosen.emoji,
+                active: true,
+                temporary: chosen.temporary
+            });
         }
     }
 
@@ -228,6 +302,132 @@ class Game {
         }
     }
 
+    drawPowerups() {
+        for (let p of this.powerups) {
+            if (!p.active) continue;
+            this.ctx.font = `${this.ballRadius * 1.5}px Arial`;
+            this.ctx.textAlign = 'center';
+            this.ctx.textBaseline = 'middle';
+            this.ctx.fillText(p.emoji, p.x, p.y);
+            p.y += 2; // Move down
+
+            // Check if it hits paddle
+            if (p.y > this.canvas.height - this.paddle.height && p.y < this.canvas.height &&
+                p.x > this.paddle.x && p.x < this.paddle.x + this.paddle.width) {
+                // Caught powerup
+                p.active = false;
+                this.applyPowerup(p);
+            } else if (p.y > this.canvas.height) {
+                p.active = false; // Missed
+            }
+        }
+
+        // Filter out inactive powerups
+        this.powerups = this.powerups.filter(p => p.active);
+    }
+
+    applyPowerup(p) {
+        if (p.temporary) {
+            // Temporary effect overrides current one
+            this.clearTemporaryEffect(); 
+            if (p.type === 'fire') {
+                this.activateFireball();
+            } else if (p.type === 'magnet') {
+                this.activateMagnet();
+            }
+        } else {
+            // Permanent effects
+            switch(p.type) {
+                case 'speedUp':
+                    this.speedMultiplier *= 1.2; 
+                    this.applyCurrentFactors();
+                    break;
+                case 'speedDown':
+                    this.speedMultiplier *= 0.8;
+                    this.applyCurrentFactors();
+                    break;
+                case 'longPaddle':
+                    this.paddleSizeMultiplier *= 1.5;
+                    this.applyCurrentFactors();
+                    break;
+                case 'shortPaddle':
+                    this.paddleSizeMultiplier *= 0.7;
+                    this.applyCurrentFactors();
+                    break;
+                case 'extraLife':
+                    this.lives++;
+                    this.updateLivesDisplay();
+                    break;
+            }
+        }
+        this.updateActiveEffectsDisplay();
+    }
+
+    applyCurrentFactors() {
+        const speedSelect = document.getElementById('ballSpeedSelect');
+        const baseSpeed = speedSelect ? parseFloat(speedSelect.value) : 1;
+        this.currentSpeedFactor = baseSpeed * this.speedMultiplier;
+
+        const directionX = this.ball.dx >= 0 ? 1 : -1;
+        const directionY = this.ball.dy >= 0 ? 1 : -1;
+
+        this.ball.dx = (this.canvas.width / 200) * this.currentSpeedFactor * directionX;
+        this.ball.dy = (this.canvas.width / 200) * this.currentSpeedFactor * directionY;
+
+        this.paddle.width = this.basePaddleWidth * this.paddleSizeMultiplier;
+        if (this.paddle.x + this.paddle.width > this.canvas.width) {
+            this.paddle.x = this.canvas.width - this.paddle.width;
+        }
+    }
+
+    activateFireball() {
+        this.fireballActive = true;
+        this.currentTemporaryEffect = 'fire';
+        this.ballEmoji = '🔥'; // fire emoji
+    }
+
+    activateMagnet() {
+        this.magnetActive = true;
+        this.currentTemporaryEffect = 'magnet';
+        this.ballEmoji = '🧲'; // magnet emoji
+    }
+
+    clearTemporaryEffect() {
+        this.fireballActive = false;
+        this.magnetActive = false;
+        this.currentTemporaryEffect = null;
+        this.ballEmoji = this.getRandomBallEmoji();
+    }
+
+    releaseBallFromPaddle() {
+        // When magnet is active and space is pressed
+        if (this.ballStuckToPaddle) {
+            this.ballStuckToPaddle = false;
+            // Determine direction based on offset
+            // If offset is negative (ball left of center), go left; if positive, go right; if zero, go straight up
+            let direction = 0;
+            if (this.ballStuckOffsetX < 0) direction = -1;
+            if (this.ballStuckOffsetX > 0) direction = 1;
+
+            const speed = (this.canvas.width / 200) * this.currentSpeedFactor;
+            this.ball.dx = speed * direction;
+            // If direction = 0, ball goes straight up
+            this.ball.dy = -(this.canvas.width / 200) * this.currentSpeedFactor;
+        }
+    }
+
+    updateActiveEffectsDisplay() {
+        const el = document.getElementById('activeEffects');
+        // Show only the emoji of the current temporary effect
+        if (this.currentTemporaryEffect === 'fire') {
+            el.textContent = 'Effects: 🔥';
+        } else if (this.currentTemporaryEffect === 'magnet') {
+            el.textContent = 'Effects: 🧲';
+        } else {
+            el.textContent = 'Effects: None';
+        }
+    }
+
     draw() {
         if (!this.gameStarted || this.gameOver) return;
 
@@ -236,6 +436,7 @@ class Game {
         this.drawBricks();
         this.drawBall();
         this.drawPaddle();
+        this.drawPowerups();
         
         this.collisionDetection();
 
@@ -244,49 +445,66 @@ class Game {
            this.ball.x + this.ball.dx < this.ball.radius) {
             this.ball.dx = -this.ball.dx;
         }
-        
-        if(this.ball.y + this.ball.dy < this.ball.radius) {
-            this.ball.dy = -this.ball.dy;
-        } else if(this.ball.y + this.ball.dy > this.canvas.height - this.ball.radius) {
-            // Check for paddle collision with angle change
-            if(this.ball.x > this.paddle.x && 
-               this.ball.x < this.paddle.x + this.paddle.width) {
-               
-                // Calculate bounce angle based on where it hit the paddle
-                const paddleCenter = this.paddle.x + this.paddle.width / 2;
-                const hitRatio = (this.ball.x - paddleCenter) / (this.paddle.width / 2);
-                
-                // Max bounce angle: 60 degrees (pi/3)
-                const maxBounceAngle = Math.PI / 3;
-                const bounceAngle = hitRatio * maxBounceAngle;
-                
-                // Current speed (magnitude)
-                const speed = Math.sqrt(this.ball.dx * this.ball.dx + this.ball.dy * this.ball.dy);
-                
-                this.ball.dx = speed * Math.sin(bounceAngle);
-                this.ball.dy = -speed * Math.cos(bounceAngle);
 
-            } else {
-                // Missed the paddle
-                this.lives--;
-                this.updateLivesDisplay();
-                
-                if(!this.lives) {
-                    this.gameOver = true;
-                    this.showGameOver();
+        if (this.ballStuckToPaddle) {
+            // Keep the ball stuck to the paddle, move with it
+            this.ball.x = this.paddle.x + (this.paddle.width / 2) + this.ballStuckOffsetX;
+            this.ball.y = this.canvas.height - this.paddle.height - this.ball.radius;
+        } else {
+            if(this.ball.y + this.ball.dy < this.ball.radius) {
+                this.ball.dy = -this.ball.dy;
+            } else if(this.ball.y + this.ball.dy > this.canvas.height - this.ball.radius) {
+                if(this.ball.x > this.paddle.x && 
+                   this.ball.x < this.paddle.x + this.paddle.width) {
+                   
+                    if (this.magnetActive) {
+                        // Stick ball to paddle
+                        this.ballStuckToPaddle = true;
+                        let ballCenterOffset = this.ball.x - (this.paddle.x + this.paddle.width/2);
+                        this.ballStuckOffsetX = ballCenterOffset;
+                        this.ball.dx = 0;
+                        this.ball.dy = 0;
+                    } else {
+                        const paddleCenter = this.paddle.x + this.paddle.width / 2;
+                        const hitRatio = (this.ball.x - paddleCenter) / (this.paddle.width / 2);
+                        
+                        const maxBounceAngle = Math.PI / 3;
+                        const bounceAngle = hitRatio * maxBounceAngle;
+                        
+                        const speed = Math.sqrt(this.ball.dx * this.ball.dx + this.ball.dy * this.ball.dy);
+                        
+                        this.ball.dx = speed * Math.sin(bounceAngle);
+                        this.ball.dy = -speed * Math.cos(bounceAngle);
+                    }
+
                 } else {
-                    // Reset ball position and speed according to selected speed
-                    const speedSelect = document.getElementById('ballSpeedSelect');
-                    const selectedSpeed = speedSelect ? parseFloat(speedSelect.value) : 1;
+                    // Missed the paddle
+                    this.lives--;
+                    this.updateLivesDisplay();
                     
-                    this.ball.x = this.canvas.width / 2;
-                    this.ball.y = this.canvas.height - 30;
-                    this.ball.dx = (this.canvas.width / 200) * selectedSpeed;
-                    this.ball.dy = -(this.canvas.width / 200) * selectedSpeed;
-                    this.paddle.x = (this.canvas.width - this.paddle.width) / 2;
-                    this.ballEmoji = this.getRandomBallEmoji();
+                    // Reset temporary effects on death
+                    this.clearTemporaryEffect();
+
+                    if(!this.lives) {
+                        this.gameOver = true;
+                        this.showGameOver();
+                    } else {
+                        const speedSelect = document.getElementById('ballSpeedSelect');
+                        const baseSpeed = speedSelect ? parseFloat(speedSelect.value) : 1;
+                        this.currentSpeedFactor = baseSpeed * this.speedMultiplier;
+
+                        this.ball.x = this.canvas.width / 2;
+                        this.ball.y = this.canvas.height - 30;
+                        this.ball.dx = (this.canvas.width / 200) * this.currentSpeedFactor;
+                        this.ball.dy = -(this.canvas.width / 200) * this.currentSpeedFactor;
+                        this.paddle.x = (this.canvas.width - this.paddle.width) / 2;
+                        this.ballEmoji = this.getRandomBallEmoji();
+                    }
                 }
             }
+
+            this.ball.x += this.ball.dx;
+            this.ball.y += this.ball.dy;
         }
 
         // Move paddle
@@ -297,14 +515,12 @@ class Game {
             this.paddle.x -= 7;
         }
 
-        this.ball.x += this.ball.dx;
-        this.ball.y += this.ball.dy;
+        this.updateActiveEffectsDisplay();
         
         requestAnimationFrame(() => this.draw());
     }
 
     startGame() {
-        // Read speed from dropdown
         const speedSelect = document.getElementById('ballSpeedSelect');
         const selectedSpeed = speedSelect ? parseFloat(speedSelect.value) : 1;
 
@@ -321,9 +537,13 @@ class Game {
 
     restartGame() {
         document.getElementById('gameOverScreen').classList.add('hidden');
-        // Read speed from dropdown again in case it changed
         const speedSelect = document.getElementById('ballSpeedSelect');
         const selectedSpeed = speedSelect ? parseFloat(speedSelect.value) : 1;
+        
+        // Reset multipliers and extras for a fresh new game
+        this.speedMultiplier = 1;
+        this.paddleSizeMultiplier = 1;
+        this.extraLives = 0;
 
         this.initializeGame(selectedSpeed);
         this.gameStarted = true;
@@ -342,7 +562,7 @@ class Game {
     }
 }
 
-// Start the game object when page loads
+// Start the game when the page loads
 window.onload = () => {
     new Game();
 };
