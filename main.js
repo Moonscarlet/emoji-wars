@@ -88,9 +88,12 @@ class Game {
     }
 
     initializeBricks() {
-        this.brickRowCount = 5;
-        this.brickColumnCount = 7;
-        this.brickWidth = this.canvas.width / 10;
+        const level = parseInt(document.getElementById('levelSelect')?.value || '1');
+        const layout = this.getLevelLayout(level);
+        
+        this.brickRowCount = layout.rows;
+        this.brickColumnCount = layout.cols;
+        this.brickWidth = this.canvas.width / (this.brickColumnCount + 3); // +3 for padding
         this.brickHeight = this.canvas.height / 20;
         this.brickPadding = 10;
         this.brickOffsetTop = this.canvas.height / 10;
@@ -100,10 +103,12 @@ class Game {
         for(let c = 0; c < this.brickColumnCount; c++) {
             this.bricks[c] = [];
             for(let r = 0; r < this.brickRowCount; r++) {
+                // Check if this brick should exist based on the pattern
+                const shouldExist = layout.pattern ? layout.pattern[r][c] : 1;
                 this.bricks[c][r] = { 
                     x: 0, 
                     y: 0, 
-                    status: 1, 
+                    status: shouldExist, 
                     emoji: this.getRandomEmoji() 
                 };
             }
@@ -165,52 +170,25 @@ class Game {
     }
 
     collisionDetection() {
+        let totalBricks = 0;
+        let destroyedBricks = 0;
+        
         for(let c = 0; c < this.brickColumnCount; c++) {
             for(let r = 0; r < this.brickRowCount; r++) {
-                const b = this.bricks[c][r];
-                if(b.status === 1) {
-                    const ballLeft = this.ball.x - this.ball.radius;
-                    const ballRight = this.ball.x + this.ball.radius;
-                    const ballTop = this.ball.y - this.ball.radius;
-                    const ballBottom = this.ball.y + this.ball.radius;
-
-                    const brickLeft = b.x;
-                    const brickRight = b.x + this.brickWidth;
-                    const brickTop = b.y;
-                    const brickBottom = b.y + this.brickHeight;
-
-                    if(ballRight > brickLeft && 
-                       ballLeft < brickRight && 
-                       ballBottom > brickTop && 
-                       ballTop < brickBottom) {
-                        
-                        const overlapX = Math.min(ballRight - brickLeft, brickRight - ballLeft);
-                        const overlapY = Math.min(ballBottom - brickTop, brickBottom - ballTop);
-
-                        if (overlapX < overlapY) {
-                            this.ball.dx = (this.ball.x < b.x + this.brickWidth/2) ? 
-                                -Math.abs(this.ball.dx) : Math.abs(this.ball.dx);
-                        } else {
-                            this.ball.dy = (this.ball.y < b.y + this.brickHeight/2) ? 
-                                -Math.abs(this.ball.dy) : Math.abs(this.ball.dy);
-                        }
-
-                        b.status = 0;
-                        this.score++;
-                        this.updateScoreDisplay();
-
-                        if (this.fireballActive) {
-                            this.destroySurroundingBricks(c, r);
-                        }
-
-                        this.maybeSpawnPowerup(b);
-
-                        if(this.score === this.brickRowCount * this.brickColumnCount) {
-                            this.win();
-                        }
-                    }
+                const brick = this.bricks[c][r];
+                // Only count positions that were originally bricks (status is 0 or 1)
+                if(brick.status === 1) {
+                    totalBricks++;
+                } else if(brick.status === 0) {
+                    destroyedBricks++;
                 }
             }
+        }
+
+        console.log(`Total: ${totalBricks}, Destroyed: ${destroyedBricks}`); // Debug line
+        
+        if(totalBricks === 0 && destroyedBricks > 0) {
+            this.win();
         }
     }
 
@@ -438,6 +416,32 @@ class Game {
         this.drawPaddle();
         this.drawPowerups();
         
+        // Brick collision
+        for(let c = 0; c < this.brickColumnCount; c++) {
+            for(let r = 0; r < this.brickRowCount; r++) {
+                const b = this.bricks[c][r];
+                if(b.status === 1) {
+                    if(this.ball.x > b.x && 
+                       this.ball.x < b.x + this.brickWidth && 
+                       this.ball.y > b.y && 
+                       this.ball.y < b.y + this.brickHeight) {
+                        
+                        this.ball.dy = -this.ball.dy;
+                        
+                        if (this.fireballActive) {
+                            this.destroySurroundingBricks(c, r);
+                        }
+                        
+                        b.status = 0;
+                        this.score++;
+                        this.updateScoreDisplay();
+                        this.maybeSpawnPowerup(b);
+                    }
+                }
+            }
+        }
+        
+        // Check if level is complete
         this.collisionDetection();
 
         // Ball collision with walls
@@ -522,9 +526,11 @@ class Game {
 
     startGame() {
         const speedSelect = document.getElementById('ballSpeedSelect');
+        const levelSelect = document.getElementById('levelSelect');
         const selectedSpeed = speedSelect ? parseFloat(speedSelect.value) : 1;
+        const selectedLevel = levelSelect ? parseInt(levelSelect.value) : 1;
 
-        this.initializeGame(selectedSpeed);
+        this.initializeGame(selectedSpeed, selectedLevel);
         document.getElementById('startScreen').classList.add('hidden');
         this.gameStarted = true;
         this.draw();
@@ -538,14 +544,15 @@ class Game {
     restartGame() {
         document.getElementById('gameOverScreen').classList.add('hidden');
         const speedSelect = document.getElementById('ballSpeedSelect');
+        const levelSelect = document.getElementById('levelSelect');
         const selectedSpeed = speedSelect ? parseFloat(speedSelect.value) : 1;
+        const selectedLevel = levelSelect ? parseInt(levelSelect.value) : 1;
         
-        // Reset multipliers and extras for a fresh new game
         this.speedMultiplier = 1;
         this.paddleSizeMultiplier = 1;
         this.extraLives = 0;
 
-        this.initializeGame(selectedSpeed);
+        this.initializeGame(selectedSpeed, selectedLevel);
         this.gameStarted = true;
         this.draw();
     }
@@ -559,6 +566,66 @@ class Game {
     getRandomBallEmoji() {
         const ballEmojis = ['⚽', '🏀', '⚾', '🎾', '🔮', '💫', '⭐', '🌟', '🌞', '🎈'];
         return ballEmojis[Math.floor(Math.random() * ballEmojis.length)];
+    }
+
+    getLevelLayout(level) {
+        const layouts = {
+            1: {
+                rows: 5,
+                cols: 7,
+                pattern: null // null means random pattern like current game
+            },
+            2: {
+                rows: 5,
+                cols: 9,
+                pattern: [
+                    [0,1,1,1,1,1,1,1,0],
+                    [1,1,1,1,1,1,1,1,1],
+                    [1,1,1,1,1,1,1,1,1],
+                    [0,1,1,1,1,1,1,1,0],
+                    [0,0,1,1,1,1,1,0,0]
+                ]
+            },
+            3: {
+                rows: 7,
+                cols: 7,
+                pattern: [
+                    [0,0,1,1,1,0,0],
+                    [0,1,1,1,1,1,0],
+                    [1,1,1,1,1,1,1],
+                    [1,1,1,1,1,1,1],
+                    [1,1,1,1,1,1,1],
+                    [0,1,1,1,1,1,0],
+                    [0,0,1,1,1,0,0]
+                ]
+            },
+            4: {
+                rows: 6,
+                cols: 8,
+                pattern: [
+                    [1,0,0,1,1,0,0,1],
+                    [1,1,0,1,1,0,1,1],
+                    [1,1,1,1,1,1,1,1],
+                    [1,1,1,1,1,1,1,1],
+                    [0,1,1,1,1,1,1,0],
+                    [0,0,1,1,1,1,0,0]
+                ]
+            },
+            5: {
+                rows: 7,
+                cols: 9,
+                pattern: [
+                    [1,0,0,0,1,0,0,0,1],
+                    [0,1,0,1,0,1,0,1,0],
+                    [0,0,1,1,1,1,1,0,0],
+                    [1,1,1,1,1,1,1,1,1],
+                    [0,0,1,1,1,1,1,0,0],
+                    [0,1,0,1,0,1,0,1,0],
+                    [1,0,0,0,1,0,0,0,1]
+                ]
+            }
+        };
+        return layouts[level] || layouts[1];
     }
 }
 
