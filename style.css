@@ -48,7 +48,7 @@ body {
 }
 
 .hidden {
-    display: none;
+    display: none !important;
 }
 
 button {
@@ -77,4 +77,16 @@ h1 {
 p {
     font-size: 1.2em;
     margin: 10px 0;
+}
+
+/* Add styles for button container */
+#gameOverButtons {
+    display: flex;
+    gap: 10px;
+    margin-top: 20px;
+}
+
+/* Optional: Add different styles for win/lose states */
+.win-title {
+    color: #00ff00 !important;
 } 

@@ -6,6 +6,12 @@ class Game {
         this.setupEventListeners();
         this.ballEmoji = this.getRandomBallEmoji();
         
+        // Make sure stats are hidden at startup
+        const gameStats = document.getElementById('gameStats');
+        if (gameStats) {
+            gameStats.classList.add('hidden');
+        }
+        
         // Track powerups
         this.powerups = [];
         
@@ -24,6 +30,10 @@ class Game {
         this.ballStuckOffsetX = 0;
 
         this.initializeGame(1); // Default initial speed factor
+
+        // Add after other properties in constructor
+        this.currentLevel = 1;
+        this.maxLevel = 5; // Based on available level layouts
     }
 
     setupCanvas() {
@@ -72,7 +82,7 @@ class Game {
         this.rightPressed = false;
         this.leftPressed = false;
 
-        // Initialize bricks
+        // Initialize bricks with current level
         this.initializeBricks();
 
         // Clear powerups
@@ -88,8 +98,8 @@ class Game {
     }
 
     initializeBricks() {
-        const level = parseInt(document.getElementById('levelSelect')?.value || '1');
-        const layout = this.getLevelLayout(level);
+        // Use the current level instead of getting from select
+        const layout = this.getLevelLayout(this.currentLevel);
         
         this.brickRowCount = layout.rows;
         this.brickColumnCount = layout.cols;
@@ -116,7 +126,7 @@ class Game {
     }
 
     getRandomEmoji() {
-        const emojis = ['😀', '😃', '😄', '😁', '😆', '😅', '😂', '🤣', '🥲', '☺️', '😊', '😇', '🙂', '🙃', '😉', '😌', '😍', '🥰', '😘', '😗', '😙', '😚', '😋', '😛', '😝', '😜', '🤪', '🤨', '🧐', '🤓', '😎', '🥸', '🤩', '🥳', '😏', '😒', '😞', '😔', '😟', '😕', '🙁', '☹️', '😣', '😖', '😫', '😩', '🥺', '😢', '😭', '😤', '😠', '😡', '🤬', '🤯', '😳', '🥵', '🥶', '😱', '😨', '😰', '😥', '😓', '🤗', '🤔', '🤭', '🤫', '🤥', '😶', '😐', '😑', '😬', '🙄', '😯', '😦', '😧', '😮', '😲', '🥱', '😴', '🤤', '😪', '😵', '🤐', '🥴', '🤢', '🤮', '🤧', '😷', '🤒', '🤕', '🤑', '🤠', '😈', '👿', '👹', '👺', '🤡', '💩', '👻', '💀', '☠️', '👽', '👾', '🤖', '🎃',
+        const emojis = ['😀', '😃', '😄', '😁', '😆', '😅', '😂', '🤣', '🥲', '☺️', '😊', '😇', '🙂', '🙃', '😉', '😌', '😍', '🥰', '😘', '😗', '😙', '😚', '😋', '😛', '���', '😜', '🤪', '🤨', '🧐', '🤓', '😎', '🥸', '🤩', '🥳', '😏', '😒', '😞', '😔', '😟', '😕', '🙁', '☹️', '😣', '😖', '😫', '😩', '🥺', '😢', '😭', '😤', '😠', '😡', '🤬', '🤯', '😳', '🥵', '🥶', '😱', '😨', '😰', '😥', '😓', '🤗', '🤔', '🤭', '🤫', '🤥', '😶', '😐', '😑', '😬', '🙄', '😯', '😦', '😧', '😮', '😲', '🥱', '😴', '🤤', '😪', '😵', '🤐', '🥴', '🤢', '🤮', '🤧', '😷', '🤒', '🤕', '🤑', '🤠', '😈', '👿', '👹', '👺', '🤡', '💩', '👻', '💀', '☠', '👽', '👾', '🤖', '🎃',
         '🐶', '🐱', '🐭', '🐹', '🐰', '🦊', '🐻', '🐼', '🐨', '🐯', '🦁', '🐮', '🐷', '🐸', '🐵', '🙈', '🙉', '🙊',
         '❤️', '🧡', '💛', '💚', '💙', '💜', '🖤', '🤍', '🤎', '💔', '❣️', '💕', '💞', '💓', '💗', '💖', '💘', '💝',
         '🌈', '☀️', '🌤️', '⛅', '🌥️', '☁️', '🌦️', '🌧️', '⛈️', '🌩️', '🌨️', '❄️', '☃️', '⚡', '🌟', '✨', '🌙', '🌚', '🌝',
@@ -234,6 +244,7 @@ class Game {
 
     updateScoreDisplay() {
         document.getElementById('scoreDisplay').textContent = `Score: ${this.score}`;
+        document.getElementById('levelDisplay').textContent = `Level: ${this.currentLevel}`;
     }
 
     updateLivesDisplay() {
@@ -524,43 +535,80 @@ class Game {
         requestAnimationFrame(() => this.draw());
     }
 
-    startGame() {
+    startGame(continuingGame = false) {
+        if (!continuingGame) {
+            // Get the selected level from dropdown when starting new game
+            const levelSelect = document.getElementById('levelSelect');
+            this.currentLevel = levelSelect ? parseInt(levelSelect.value) : 1;
+        }
+        
         const speedSelect = document.getElementById('ballSpeedSelect');
-        const levelSelect = document.getElementById('levelSelect');
         const selectedSpeed = speedSelect ? parseFloat(speedSelect.value) : 1;
-        const selectedLevel = levelSelect ? parseInt(levelSelect.value) : 1;
 
-        this.initializeGame(selectedSpeed, selectedLevel);
+        this.initializeGame(selectedSpeed);
         document.getElementById('startScreen').classList.add('hidden');
+        document.getElementById('gameStats').classList.remove('hidden');
         this.gameStarted = true;
         this.draw();
     }
 
-    showGameOver() {
+    showGameOver(wonGame = false) {
         document.getElementById('gameOverScreen').classList.remove('hidden');
         document.getElementById('finalScore').textContent = `Final Score: ${this.score}`;
+        
+        // Update game over text based on win/loss
+        document.getElementById('gameOverTitle').textContent = wonGame ? 'You Won!' : 'Game Over';
+        
+        // Show both restart and main menu buttons
+        document.getElementById('gameOverButtons').innerHTML = `
+            <button id="restartButton">Try Again</button>
+            <button id="mainMenuButton">Main Menu</button>
+        `;
+        
+        // Add event listeners
+        document.getElementById('restartButton').addEventListener('click', () => this.restartGame());
+        document.getElementById('mainMenuButton').addEventListener('click', () => this.returnToMainMenu());
     }
 
     restartGame() {
         document.getElementById('gameOverScreen').classList.add('hidden');
+        document.getElementById('gameStats').classList.remove('hidden');
+        
         const speedSelect = document.getElementById('ballSpeedSelect');
-        const levelSelect = document.getElementById('levelSelect');
         const selectedSpeed = speedSelect ? parseFloat(speedSelect.value) : 1;
-        const selectedLevel = levelSelect ? parseInt(levelSelect.value) : 1;
         
         this.speedMultiplier = 1;
         this.paddleSizeMultiplier = 1;
         this.extraLives = 0;
 
-        this.initializeGame(selectedSpeed, selectedLevel);
+        this.initializeGame(selectedSpeed);
         this.gameStarted = true;
         this.draw();
     }
 
-    win() {
+    returnToMainMenu() {
+        document.getElementById('gameOverScreen').classList.add('hidden');
+        document.getElementById('startScreen').classList.remove('hidden');
+        document.getElementById('gameStats').classList.add('hidden');
         this.gameOver = true;
-        alert('Congratulations! You win!');
-        this.restartGame();
+        this.gameStarted = false;
+        const levelSelect = document.getElementById('levelSelect');
+        this.currentLevel = levelSelect ? parseInt(levelSelect.value) : 1;
+
+    }
+
+    win() {
+        if (this.currentLevel < this.maxLevel) {
+            // Move to next level
+            this.currentLevel++;
+            alert(`Congratulations! Moving to Level ${this.currentLevel}`);
+            this.startGame(true); // true indicates continuing to next level
+        } else {
+            // Beat final level
+            alert('Congratulations! You beat all levels!');
+            this.gameOver = true;
+            this.showGameOver(true); // true indicates winning the game
+        }
     }
 
     getRandomBallEmoji() {

@@ -8,8 +8,9 @@
 </head>
 <body>
     <div id="gameContainer">
-        <div id="gameStats">
+        <div id="gameStats" class="hidden">
             <span id="scoreDisplay">Score: 0</span>
+            <span id="levelDisplay">Level: 1</span>
             <span id="livesDisplay">Lives: 3</span>
             <span id="activeEffects">Effects: None</span>
         </div>
@@ -36,9 +37,12 @@
             <p>Press Space to release the ball if Magnet effect is active</p>
         </div>
         <div id="gameOverScreen" class="overlay hidden">
-            <h1>Game Over</h1>
+            <h1 id="gameOverTitle">Game Over</h1>
             <p id="finalScore">Final Score: 0</p>
-            <button id="restartButton">Play Again</button>
+            <div id="gameOverButtons">
+                <button id="restartButton">Try Again</button>
+                <button id="mainMenuButton">Main Menu</button>
+            </div>
         </div>
     </div>
     <script src="main.js"></script>
